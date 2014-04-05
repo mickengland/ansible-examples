@@ -1,0 +1,43 @@
+# Install and configure an apache server with vagrant and ansible 
+# Playbooks will be located in the provisioning director
+# Installation will be for Debian Wheezy 64bit
+# We are using a nodes array so we can add more nodes later
+#
+domain   = 'example.com'
+
+nodes = [
+  { :hostname => 'web1',    :ip => '192.168.0.40', :box => 'ansibleDebian', :fwdhost => 8080, :fwdguest => 80 },
+  { :hostname => 'db1',     :ip => '192.168.0.41', :box => 'ansibleDebian' },
+]
+
+Vagrant::Config.run("2") do |config|
+  nodes.each do |node|
+    config.vm.define node[:hostname] do |node_config|
+      node_config.vm.box = node[:box]
+      node_config.vm.host_name = node[:hostname] + '.' + domain
+      node_config.vm.network :private_network, ip: node[:ip]
+
+      if node[:fwdhost]
+        node_config.vm.network :forwarded_port, guest: node[:fwdguest], host: node[:fwdhost]
+      end
+
+      memory = node[:ram] ? node[:ram] : 256;
+      node_config.vm.provider :virtualbox do |vb|
+        vb.customize [
+          'modifyvm', :id,
+          '--name', node[:hostname],
+          '--memory', memory.to_s
+        ] 
+      end
+    
+      node_config.vm.provision :ansible do |ansible|
+        ansible.playbook = "provisioning/site.yml"
+        ansible.inventory_path = "provisioning/hosts"
+        # On Vagrant < 1.3 this used to be `inventory_file`...
+        # ansible.inventory_file = "provisioning/hosts-vagrant"
+        ansible.verbose = true
+        ansible.sudo = true
+      end
+    end
+  end
+end
